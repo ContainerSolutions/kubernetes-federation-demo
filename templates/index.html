@@ -1,0 +1,614 @@
+
+<html>
+<head>
+    <title>Kubernetes Federation Demo</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style type="text/css">
+    body {
+        margin: 0;
+        padding: 0;
+    }
+    #map {
+        width: 100%;
+        height: 100%;
+        position: absolute;
+        top: 0;
+        left: 0;
+    }
+    #stats {
+        font-family: Arial, sans-serif;
+        background: rgba(0, 0, 0, 0.3);
+        color: #eee;
+        font-size: 12px;
+        line-height: 18px;
+        padding: 10px;
+        margin: 10px;
+        min-width: 150px;
+    }
+    #stats .bytes, #stats .errors {
+        font-family: 'PT Mono', monospace;
+    }
+    .infowindow {
+        text-align: center;
+    }
+    .toggle {
+        display: inline-block;
+        text-align: center;
+        height: 32px;
+        width: 100px;
+        font-size: 17px;
+        color: #fff;
+        text-decoration: none;
+        font-family: Arial;
+        line-height: 34px;
+        margin: 15px 0 10px 17px;
+
+    }
+    .toggle.enabled {
+        background-color: green;
+    }
+    .toggle.disabled {
+        background-color: darkred;
+    }
+    .toggle.waiting {
+        background-color: #dbe5fa;
+        background-image: url('/static/loader.svg');
+        background-position: center;
+        background-repeat: no-repeat;
+    }
+    #trafficInfo, #sourceInfo {
+        font-family: 'PT Mono', monospace;
+        font-weight: bold;
+    }
+    #trafficInfo .enabled {
+        color: lime;
+        font-weight: normal;
+    }
+    #trafficInfo .disabled {
+        color: red;
+        font-weight: normal;
+    }
+    #sourceInfo {
+        display: none;
+        font-weight: normal;
+    }
+    hr {
+        height: 1px;
+        border: none;
+        background-color: #999;
+    }
+    </style>
+</head>
+<body>
+    
+<div id="map"></div>
+<div id="stats"><div id="trafficInfo"></div><div id="sourceInfo"></div></div>
+
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDkgc5x8d2znQMNug8CsZOHSz8B31JzJSI&libraries=drawing,geometry"></script>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.4/jquery.min.js"></script>
+<script src="http://code.jquery.com/color/jquery.color-2.1.2.min.js"></script>
+<script>
+(function() {
+    window.Backend = new function() {
+
+        const providers = ['aws', 'azure', 'gce'];
+
+        let dcChangeCallbacks = [], trafficCallbacks = [];
+        let datacenters = {}, allTraffic = {}, stoppedTrafficSources = {};
+        
+        let backend = this;
+
+        this.disable = function(name) {
+            return execCmd("disable", name);
+        };
+
+        this.enable = function(name) {
+            return execCmd("enable", name);
+        };
+
+        this.startTraffic = function(sourceName) {
+            return execCmd("startTraffic", sourceName).done(function() {
+                stoppedTrafficSources[sourceName] = false;
+            });
+        };
+
+        this.stopTraffic = function(sourceName) {
+            return execCmd("stopTraffic", sourceName).done(function() {
+                stoppedTrafficSources[sourceName] = true;
+            });
+        };
+
+        this.init = function() {
+            console.log("Initializing backend");
+            window.setInterval(function() {
+                // would be nicer to do a Websocket here...
+                $.getJSON("/services").done(backend.updateDCs);
+            }, 500);
+        };
+
+        this.updateDCs = function(data) {
+            let [delta, traffic] = processDCUpdate(data);
+            if (delta.length) {
+                for (let fun of dcChangeCallbacks) fun(delta);
+            }   
+            if (traffic.length) {
+                for (let fun of trafficCallbacks) fun(traffic);
+            }
+        };
+
+        this.onDCChange = function(fun) {
+            dcChangeCallbacks.push(fun);
+        };
+
+        this.onTraffic = function(fun) {
+            trafficCallbacks.push(fun);
+        };
+
+        this.getDatacenter = function(name) {
+            return datacenters[name];
+        };
+
+        this.eachDatacenter = function(fun) {
+            for (name in datacenters) {
+                fun(datacenters[name]);
+            }
+        };
+
+        this.isActiveTrafficSource = function(name) {
+            return !stoppedTrafficSources[name];
+        };
+
+        function processDCUpdate(data) {
+            let delta = [], traffic = [];
+            for (d of data) {
+                let name = d.IpAddress.dc, dc = datacenters[name];
+                let inbound = d.Traffic || {};
+                if (dc) {
+                    if (d.Ready !== dc.ready) {
+                        delta.push(dc);
+                        dc.ready = d.Ready;
+                    }
+                    let newTraffic = changedTraffic(name, inbound);
+                    if (!$.isEmptyObject(newTraffic)) {
+                        traffic.push({ target: name, sources: newTraffic });
+                    }
+                } else {
+                    let coords = latLngFromString(d.IpAddress.loc), provider = providers[d.CloudProvider];
+                    dc = new Datacenter(name, d.Ready, coords, provider, d.IpAddress);
+                    datacenters[name] = dc;
+                    delta.push(dc);
+                    traffic.push({ target: name, sources: inbound });
+                }
+                allTraffic[name] = inbound;
+            }
+            return [delta, traffic];
+        }
+
+        function changedTraffic(name, inbound) {
+            let changed = {}, current = allTraffic[name];
+            for (let dc in inbound) {
+                if (!current[dc] || inbound[dc] > current[dc]) {
+                    changed[dc] = inbound[dc];
+                }
+            }
+            return changed;
+        }
+
+        function latLngFromString(str) {
+            var ll = str.split(/,\s?/);
+            return new google.maps.LatLng(ll[0], ll[1]);
+        }
+
+        function execCmd(cmd, dcName) {
+            return $.get("/" + cmd + "?dc=" + dcName);
+        }
+
+    }();
+    
+    function Datacenter(name, ready, coords, provider, info) {
+        this.name = name;
+        this.ready = ready;
+        this.coords = coords;
+        this.info = info;
+        this.provider = provider;
+    }
+
+    Datacenter.prototype = {
+
+        // Returns a human readable name, like "Berkeley County (South Carolina, USA)"
+        displayName: function() {
+            let info = this.info;
+            let part1 = info.city, part2 = info.region || "";
+            if (part2 && info.country) {
+                part2 += ", " + info.country;
+            } else if (info.country) {
+                part2 = info.country;
+            }
+            if (part1 && part2) {
+                return part1 + " (" + part2 + ")";
+            } else {
+                return part1 || part2 || "";
+            } 
+        }
+
+    };
+
+    let MapCanvas = new function() {
+
+        let map = null, infowdw = null, dcMarkers = {}, srcMarkers = {}, trafficLines = {};
+
+        let recentlyActive = {}, recentTraffic = {}, stats = {}, rps = {}, srcInfoDC = null;
+
+        const AllReqs = '_all_', Disabled = 'disabled', Enabled = 'enabled', Waiting = 'waiting';
+
+        const TrafficSources = {
+            "asia-northeast1": { title: "Asia North-East (Japan)", coords: ll(35.648112, 139.790766) },
+            "us-central1": { title: "US Central (Iowa)", coords: ll(41.221099, -95.863942) },
+            "us-west1": { title: "US West (Oregon)", coords: ll(45.632130, -121.200992) },
+            "europe-west1": { title: "Europe West (Belgium)", coords: ll(50.470976, 3.864521) },
+            "asia-east1": { title: "Asia East (Taiwan)", coords: ll(23.925895, 120.441405) },
+            "us-east1": { title: "US East (South Carolina)", coords: ll(33.072657, -80.038877) }
+        };
+
+        this.init = function(callback) {
+            console.log("Initializing map");
+            initMap();
+            listenDCChanges();
+            listenTrafficChanges();
+            clearRecentlyActive();
+            clearRecentTraffic();
+            countRequestsPerSecond();
+            callback();
+        };
+
+        function initMap() {
+            map = new google.maps.Map($('#map')[0], {
+                zoom: 3,
+                panControl: false,
+                streetViewControl: false,
+                mapTypeControl: false,
+                scaleControl: false,
+                scaleControl: false,
+                center: ll(47.1775007, 8.7080327),
+                mapTypeId: "hybrid"
+            });
+            map.controls[google.maps.ControlPosition.LEFT_TOP].push($('#stats')[0]);
+        }
+
+        function ll(lat, lng) {
+            return new google.maps.LatLng(lat, lng);
+        }
+
+        function listenDCChanges() {
+            Backend.onDCChange(function(datacenters) {
+                for (let dc of datacenters) {
+                    if (dc.ready) console.log("Datacenter", dc.name, "became ready");
+                    if (dcMarkers[dc.name]) {
+                        dcMarkers[dc.name].setIcon(icon(dc));
+                    } else {
+                        drawDCMarker(dc)
+                    }
+                }
+            });
+        }
+
+        function listenTrafficChanges() {
+            Backend.onTraffic(function(traffic) {
+                for (let t of traffic) {
+                    let name = t.target, sources = Object.keys(t.sources), dc = Backend.getDatacenter(name);
+                    for (let src of sources) {
+                        if (!srcMarkers[src]) drawSrcMarker(src);
+                        let requests = Number(t.sources[src]) || 0;
+                        updateTrafficLine(src, dc, requests);
+                        updateStats(src, dc, requests);
+                    }
+                    if (sources.length) updateRecentlyActive(name);
+                }
+                updateStatsWindow();
+            });
+        }
+
+        function countRequestsPerSecond() {
+            let oldStats = {}, sampleDurationSec = 2;
+            window.setInterval(function() {
+                for (key in stats) {
+                    let delta = Math.max(0, getStats(key) - (oldStats[key] || 0));
+                    rps[key] = delta / sampleDurationSec;
+                }
+                oldStats = $.extend(true, {}, stats);
+            }, 1000 * sampleDurationSec);
+        };
+
+        function updateStats(src, dc, requests) {
+            stats[src + '>' + dc.name] = requests;
+            stats[dc.name] = sumDCStats(dc);
+            stats[AllReqs] = sumAllStats();
+        }
+
+        function sumDCStats(dc) {
+            let acc = 0, suffix = '>' + dc.name;
+            for (key in stats) {
+                if (key.endsWith(suffix)) acc += stats[key];
+            }
+            return acc;
+        }
+
+        function sumAllStats() {
+            let acc = 0;
+            for (key in stats) {
+                if (key.includes('>')) acc += stats[key];
+            }
+            return acc;
+        }
+
+        function getStats(key) {
+            return stats[key] || 0;
+        }
+
+        function updateStatsWindow() {
+            let spans = [];
+            Backend.eachDatacenter(function(dc) {
+                let [clazz, text] = dc.ready ? [Enabled, 'ready'] : [Disabled, 'down'];
+                spans.push('<span class="' + clazz + '">' + dc.name + ': ' + getStats(dc.name) + ' (' + formatRps(dc.name) + ')</span>');
+            });
+            let html = 'Cluster traffic: ' + getStats(AllReqs) + ' (' + formatRps(AllReqs) + ')<hr>' + spans.join('<br>');
+            $('#trafficInfo').html(html);
+            if (srcInfoDC) updateSourceInfo();
+        }
+
+        function updateSourceInfo() {
+            let suffix = '>' + srcInfoDC, spans = [];
+            for (key in stats) {
+                if (key.endsWith(suffix)) {
+                    let src = key.split('>')[0];
+                    spans.push('from ' + src + ": " + getStats(key) + ' (' + formatRps(key) + ')');
+                }
+            }
+            if (!spans.length) spans.push('no incoming traffic');
+            $('#sourceInfo').html('<hr><b>Traffic to ' + srcInfoDC + ":</b><br>" + spans.join('<br>'));
+        }
+
+        function hideSourceInfo() {
+            srcInfoDC = null;
+            $('#sourceInfo').slideUp();
+        }
+
+        function showSourceInfo(dcName) {
+            srcInfoDC = dcName;
+            $('#sourceInfo').slideDown();
+        }
+
+        function formatRps(key) {
+            let r = rps[key] || 0.0;
+            return r.toFixed(r >= 10 ? 0 : 1) + " req/s";
+        }
+
+        function updateRecentlyActive(name) {
+            if (!wasRecentlyActive(name) && dcMarkers[name]) {
+                console.log("Datacenter", name, "became active");
+                dcMarkers[name].setIcon(Icon.activeDC);
+            }
+            recentlyActive[name] = now();
+        }
+
+        function wasRecentlyActive(name) {
+            return recentlyActive[name] && recentlyActive[name] > (now() - 6000);
+        }
+
+        function now() {
+            return new Date().getTime();
+        }
+
+        function clearRecentlyActive() {
+            window.setInterval(function() {
+                for (let name in recentlyActive) {
+                    if (!wasRecentlyActive(name)) {
+                        let dc = Backend.getDatacenter(name);
+                        console.log("Datacenter", name, "went inactive");
+                        dcMarkers[name].setIcon(icon(dc));
+                        delete recentlyActive[name];
+                    }
+                }
+            }, 3000);
+        }
+
+        function clearRecentTraffic() {
+            window.setInterval(function() {
+                let ts = now() - 6000;
+                for (let rt in recentTraffic) {
+                    if (recentTraffic[rt] < ts) {
+                        delete recentTraffic[rt];
+                        let [src, name] = rt.split('>');
+                        console.log("Traffic line from", src, "to", name, "went silent");
+                        if (!trafficLines[src] || !trafficLines[src][name]) return;
+                        let traffic = trafficLines[src][name];
+                        window.clearInterval(traffic.interval);
+                        traffic.line.setMap(null);
+                        traffic.line = null;
+                        delete trafficLines[src][name];
+                        updateStatsWindow();
+                    }
+                }
+            }, 3000);
+        }
+
+        function drawDCMarker(dc) {
+            dcMarkers[dc.name] = new google.maps.Marker({
+                map: map, position: dc.coords,
+                title: dc.displayName(),
+                icon: icon(dc)
+            });
+            addInfoWindow(dcMarkers[dc.name], dc.displayName(), dc.name, true);
+        }
+
+        function drawSrcMarker(src) {
+            srcMarkers[src] = new google.maps.Marker({
+                map: map, position: TrafficSources[src].coords,
+                title: TrafficSources[src].title,
+                icon: Icon.activeSrc
+            });
+            addInfoWindow(srcMarkers[src], TrafficSources[src].title, src, false);
+        }
+
+        function updateSrcMarker(src) {
+            if (!srcMarkers[src]) return;
+            let ico = Backend.isActiveTrafficSource(src) ? Icon.activeSrc : Icon.inactiveSrc;
+            srcMarkers[src].setIcon(ico);
+        }
+
+        function addInfoWindow(marker, heading, name, isDC) {
+            let wdwHead = '<div class="infowindow"><strong>' + heading + '</strong><br>';
+            let wdwFoot = '</div>';
+            
+            let wdw = new google.maps.InfoWindow({ content: wdwHead + wdwFoot });
+            let rdy = wdw.addListener('domready', function() {
+                let active = isDC ? Backend.getDatacenter(name).ready : Backend.isActiveTrafficSource(name);
+                let domId = 'toggle_' + name + (isDC ? '_dc' : '_src');
+                wdw.setContent(wdwHead + toggleButton(domId, active) + wdwFoot);
+                observeButton($('#' + domId), name, isDC);
+                if (isDC) showSourceInfo(name);
+            });
+            wdw.addListener('closeclick', hideSourceInfo);
+            marker.addListener('click', function() {
+                closeInfowdw();
+                wdw.open(map, marker);
+                infowdw = wdw;
+            });
+        }
+
+        function toggleButton(domId, active) {
+            let [clazz, text] = active ? [Enabled, 'Disable'] : [Disabled, 'Enable'];
+            return '<a href="#" id="' + domId + '" class="toggle ' + clazz + '">' + text + '</a>';
+        }
+
+        function observeButton($btn, name, isDC) {
+            $btn.click(function() {
+                if ($btn.hasClass(Waiting)) return false;
+                let promise = null, oldState = null;
+                if ($btn.hasClass(Enabled)) {
+                    oldState = Enabled;
+                    promise = isDC ? Backend.disable(name) : Backend.stopTraffic(name);
+                } else {
+                    oldState = Disabled;
+                    promise = isDC ? Backend.enable(name) : Backend.startTraffic(name);
+                }
+                promise.fail(function(e) {
+                    console.log("error executing", promise, "for", name, ":", e);
+                    resetButton($btn, oldState);
+                }).done(function() {
+                    closeInfowdw();
+                    if (!isDC) updateSrcMarker(name);
+                });
+                $btn.removeClass(oldState).addClass(Waiting).text('');
+                return false;
+            });
+        }
+
+        function resetButton($btn, state) {
+            $btn.addClass(state);
+            $btn.removeClass(Waiting);
+            $btn.text(state == Disabled ? 'Enable' : 'Disable');
+        }
+
+        function closeInfowdw() {
+            if (!infowdw) return;
+            infowdw.close();
+            infowdw = null;
+            hideSourceInfo();
+        }        
+
+        function icon(dc) {
+            if (wasRecentlyActive(dc.name)) return Icon.activeDC;
+            if (!dc.ready) return Icon.brokenDC
+            return Icon.inactiveDC;
+        }
+
+        function strokeWeight(requestsDelta) {
+            if (requestsDelta <= 0) return 0;
+            if (requestsDelta <= 5) return 1;
+            if (requestsDelta <= 10) return 2;
+            if (requestsDelta <= 20) return 3;
+            if (requestsDelta <= 40) return 4;
+            return 5;
+        }
+
+        function updateTrafficLine(trafficSource, dataCenter, requests) {
+            recentTraffic[trafficSource + '>' + dataCenter.name] = now();
+            if (!trafficLines[trafficSource]) trafficLines[trafficSource] = {};
+            let traffic = trafficLines[trafficSource][dataCenter.name];
+            if (traffic) {
+                let requestsDelta = requests - traffic.requests;
+                traffic.requests = requests;
+                traffic.line.setOptions({ strokeWeight: strokeWeight(requestsDelta) });
+            } else {
+                traffic = { requests: requests, line: null, interval: null };
+                trafficLines[trafficSource][dataCenter.name] = traffic;
+                let locSrc = TrafficSources[trafficSource].coords, locTgt = dataCenter.coords;
+                drawLine(traffic, locSrc, locTgt, strokeWeight(requests));
+            }
+        }
+
+        function drawLine(traffic, locSrc, locTgt, strokeWeight) {
+            let startColor = $.Color('#3671E4');
+            let endColor = $.Color('#32E3B1');
+            traffic.line = new google.maps.Polyline({
+                path: [locSrc, locTgt],
+                geodesic: true,
+                strokeColor: startColor.toHexString(),
+                strokeOpacity: 1.0,
+                strokeWeight: strokeWeight,
+                map: map
+            });
+            let step = 0, grow = true, numSteps = 125, tick = 10;
+            traffic.interval = window.setInterval(function() {
+                step += 1;
+                if (step > numSteps) {
+                    step = 0;
+                    if (!grow) {
+                        [locSrc, locTgt] = [locTgt, locSrc];
+                        [startColor, endColor] = [endColor, startColor];
+                    }
+                    grow = !grow;
+                } else {
+                    ratio = step / numSteps;
+                    let waypoint = google.maps.geometry.spherical.interpolate(locSrc, locTgt, ratio);
+                    if (grow) {
+                        let mixColor = startColor.transition(endColor, ratio);
+                        traffic.line.setOptions({ path: [locSrc, waypoint], strokeColor: mixColor.toHexString() });
+                    } else {
+                        traffic.line.setOptions({ path: [waypoint, locTgt] });
+                    }
+                }
+            }, tick);            
+        }
+    }();
+
+    const Icon = {
+        activeSrc: '/static/marker_home.png',
+        inactiveSrc: '/static/marker_silent.png',
+        activeDC: '/static/marker_blue.png',
+        inactiveDC: '/static/marker_grey.png',
+        brokenDC:  '/static/marker_broken.png'
+    };
+
+    function preloadAssets() {
+        ['/static/loader.svg', Icon.inactiveSrc, Icon.activeSrc, Icon.activeDC, Icon.inactiveDC, Icon.brokenDC]
+        .forEach(function(src) {
+            $('<img/>')[0].src = src;
+        });
+    }
+
+    function init() {
+        $(function() {
+            preloadAssets();
+            google.maps.event.addDomListener(window, 'load', function() { MapCanvas.init(Backend.init); });
+        });
+    }    
+
+    // access the UI's URL with ?simulate to overwrite the live backend with a simulated one
+    /simulate/.test(document.location.search) ? $.getScript('/static/simulate.js', init) : init();    
+})();
+</script>
+</body>
+</html>

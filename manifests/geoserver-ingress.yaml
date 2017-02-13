@@ -1,0 +1,11 @@
+### Deployment of the Ingress
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: geoserver
+  annotations:
+    kubernetes.io/ingress.global-static-ip-name: "kubernetes-ingress"
+spec:
+  backend:
+    serviceName: geoserver
+    servicePort: 80
