@@ -29,16 +29,13 @@ deploy-service:
 deploy-ingress:
 	kubectl --context=federation create -f manifests/geoserver-ingress.yaml
 
-status:
-	kubectl get clusters
-	# kubectl --context=federation describe ingress geoserver-ingress
-	# kubectl --context=federation describe service geoserver-service
-	# kubectl --context=federation describe replicaset geoserver-replica
+clusters:
+	kubectl get clusters	
 
 destroy:	
 	kubectl --context=federation delete -f manifests/geoserver-ingress.yaml
 	kubectl --context=federation delete -f manifests/geoserver-service.yaml
-	kubectl --context=federation delete -f manifests/geoserver-replica.yaml	
+	kubectl --context=federation delete -f manifests/geoserver-replica.yaml
 	kubectl delete ns federation-system
 	
 

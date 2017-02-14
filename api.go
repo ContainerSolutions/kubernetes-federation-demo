@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"sync"
-	//"time"
 )
 
 // Defines the currently supported cloud providers
@@ -220,17 +219,6 @@ func (api *api) trafficSourceActive(w http.ResponseWriter, r *http.Request) {
 func (api *api) adminHandlerFunc(w http.ResponseWriter, r *http.Request) {
 
 	vms := api.adminConfig.adminPanel.getAll()
-
-	// finalList := vms
-	// now := time.Now().UTC().Add(-5 * time.Minute)
-	// for index, vm := range vms {
-	// 	if now.After(vm.Timestamp) {
-	// 		finalList = remove(vms, index)
-	// 	}
-	// }
-
-	// data, _ := json.Marshal(&finalList)
-
 	data, _ := json.Marshal(&vms)
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(data)
@@ -271,18 +259,7 @@ func (api *api) pingHandlerFunc(w http.ResponseWriter, r *http.Request) {
 
 		// loop through all source of traffic the zone received
 		for trafficSourceZoneName, newTrafficCounter := range z.Traffic {
-
 			existingZone.Traffic[trafficSourceZoneName] = newTrafficCounter
-			// // if the zone already had a specific source traffic update it
-			// if existingCounter, ok := existingZone.Traffic[trafficSourceZoneName]; ok {
-			// 	log.Println("Existing zone", trafficSourceZoneName, "found:", existingCounter)
-			// 	existingZone.Traffic[trafficSourceZoneName] = existingCounter + newTrafficCounter
-			// 	log.Printf("New traffic added: %s\n", existingZone.Traffic[trafficSourceZoneName])
-			// } else {
-			// 	// add the first
-			// 	existingZone.Traffic[trafficSourceZoneName] = newTrafficCounter
-			// 	log.Printf("New traffic received for the zone %s: %d", trafficSourceZoneName, existingZone.Traffic[trafficSourceZoneName])
-			// }
 		}
 	}
 

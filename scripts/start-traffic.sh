@@ -20,7 +20,17 @@ else
     echo "Creating instance $INSTANCE..."
     gcloud compute instances create $INSTANCE --image-family ubuntu-1604-lts --image-project ubuntu-os-cloud --zone $ZONE --machine-type=f1-micro -q
     test $? -ne 0 && die "Unable to create instance"
-    sleep 10
+
+    while true; do
+        gcloud compute ssh $INSTANCE --zone $ZONE -- uname >/dev/null 2>&1
+        if [ $? -ne 0 ]; then
+            echo "Waiting for $INSTANCE to become ready..."
+        else
+            echo "Instance $INSTANCE is ready."
+            break
+        fi
+    done
+
 fi
 
 echo

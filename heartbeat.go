@@ -72,12 +72,6 @@ func (h *heartbeat) Start() {
 
 func (h *heartbeat) ping(url string) {
 	// add the traffic information
-	// traffic := make(map[string]int64)
-	// for zoneId, counter := range h.apiConfig.traffic {
-	// 	traffic[zoneId] = counter
-	// 	log.Printf("Sending traffic for zone: %s => %d\n", zoneId, counter)
-	// }
-
 	h.apiConfig.zone.Traffic = h.apiConfig.traffic
 
 	if data := h.apiConfig.zone.toJson(); len(data) > 0 {
