@@ -1,0 +1,39 @@
+---
+### Deployment of the geoserver containers
+apiVersion: extensions/v1beta1
+kind: ReplicaSet
+metadata:
+  name: geoserver
+spec:
+  replicas: 5
+  template:
+    metadata:
+      labels:
+        app: geoserver
+    spec:
+      containers:
+      - name: geoserver
+        image: containersoluploader/geoserver:0.4.8
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+        livenessProbe:
+          httpGet:
+            # Path to probe; should be cheap, but representative of typical behavior
+            path: /live
+            port: 8080
+          initialDelaySeconds: 10
+          timeoutSeconds: 1
+        readinessProbe:
+          httpGet:            
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 10
+          timeoutSeconds: 1
+        env:        
+        - name: REMOTE_IP
+          value: "104.155.43.73"
+        - name: REMOTE_PORT
+          value: "80"
+        - name: INTERVAL
+          value: "2"

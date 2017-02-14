@@ -1,0 +1,25 @@
+{
+	"comment": "",
+	"ignore": "test",
+	"package": [
+		{
+			"checksumSHA1": "SOlzXbE84I33ISmxg0g/clBf+1k=",
+			"path": "github.com/boltdb/bolt",
+			"revision": "94c8db596809690a3f7046fa83c7b0dda13a3222",
+			"revisionTime": "2016-07-30T14:44:16Z"
+		},
+		{
+			"checksumSHA1": "VEKA/pSlr05aqPnIVAfVjUJVFLc=",
+			"path": "github.com/paulbellamy/ratecounter",
+			"revision": "348ad3bf08f04afb2b4f645a6587c9372c06a684",
+			"revisionTime": "2017-02-06T10:26:57Z"
+		},
+		{
+			"checksumSHA1": "8fD/im5Kwvy3JgmxulDTambmE8w=",
+			"path": "golang.org/x/sys/unix",
+			"revision": "a646d33e2ee3172a661fc09bca23bb4889a41bc8",
+			"revisionTime": "2016-07-15T05:43:45Z"
+		}
+	],
+	"rootPath": "github.com/ContainerSolutions/geoserver"
+}
