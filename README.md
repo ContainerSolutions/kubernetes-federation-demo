@@ -79,7 +79,7 @@ Then execute: `make push`
 Point your browser to the IP address you generated in step 2 (geoserver-admin).
 You can always find it again later by executing:
 
-    `gcloud compute addresses list | grep geoserver-admin`
+    gcloud compute addresses list | grep geoserver-admin
 
 You should see the clusters appearing on a map, but no traffic yet.
 
@@ -121,7 +121,8 @@ First step is to retrieve the ports to open via:
 The ports to open are listed under: `default-http-backend` service.
 It usually is higher than 30000.
 
-Then run the following command: (please change the ports accordingly)    
+Then run the following command: (please change the ports accordingly)
+
     gcloud compute firewall-rules create my-federated-ingress-firewall-rule --source-ranges 130.211.0.0/22 --allow "icmp,tcp:80,tcp:443,tcp:30451,tcp:31014,tcp:30699" --target-tags "cluster-europe-west1-b,cluster-asia-east1-a,cluster-us-east1-b" --network default
 
 See also:
