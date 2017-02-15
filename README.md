@@ -4,22 +4,30 @@
 
 ### Kubernetes command line tools
 
-Download the command line binaries located at: `https://github.com/kubernetes/kubernetes/blob/master/CHANGELOG.md#client-binaries`
-Install the binaries in your $PATH (Ex. /usr/local/sbin)
+Download the command line tools from [Github](https://github.com/kubernetes/kubernetes/blob/master/CHANGELOG.md#client-binaries) and 
+install them in your `$PATH` (e.g. `/usr/local/sbin`).
+
+### GCP project
+
+Create a new project in your [Google Cloud Console](https://console.cloud.google.com/) and note down the project name.
 
 ### GKE secret key
-Generate a Google platform secret key, in JSON format and store it in this location: `$HOME/.federation-key.json`
 
-### Preparing the demo
+Generate a Google Cloud Platform secret key in JSON format and store it in this location: `$HOME/.federation-key.json`
 
-## Setup GKE clusters in different regions
+### DockerHub account
 
-*WARNING:* this creates several clusters in Google Cloud Platform! Watch out for your billing! /!\
+If you haven't got a DockerHub account yet, create one at [hub.docker.com](https://hub.docker.com/).
+
+## Preparing the demo
+
+**WARNING:** this creates several clusters in Google Cloud Platform! Watch out for your billing! /!\
 
 ### Build and push the docker image for the demo application
-Adjust the version of the image inside the Dockerfile.
 
-1. make push
+Adjust the variables `FED_PROJECT`, `FED_DNS_ZONE` and `IMAGE` in the `Makefile` and in `scripts/settings.source` to match your GCE project name, DNS configuration and your DockerHub account.
+
+Then execute: `make push`
 
 ### Create the clusters and deploy the demo application
 
@@ -75,7 +83,7 @@ You can always find it again later by executing:
 
 You should see the clusters appearing on a map, but no traffic yet.
 
-#### Generate traffic
+### Generate traffic
 
 The script `scripts/start-traffic.sh` will create a micro-instance in the desired Google 
 datacenter and execute a small script that generates traffic on the federated cluster.
