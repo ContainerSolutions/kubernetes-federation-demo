@@ -93,9 +93,9 @@ Launch is as often as you want with different regions as argument.
 work nicely with the Maps user interface.
 
 The required arguments are the region where to generate traffic from, the IP address 
-of the global ingress load balancer (from step 2) and the IP address of the admin service (FIXME where do you find it easily?).
+of the global ingress load balancer and the IP address of the admin service (from step 2 above).
 
-    # replace the two IP addresses with your own defined in point 2:
+    # replace the two IP addresses with your own created in step 2:
     scripts/start-traffic.sh asia-northeast1 130.211.41.245 104.155.43.73
     scripts/start-traffic.sh us-central1 130.211.41.245 104.155.43.73
 
