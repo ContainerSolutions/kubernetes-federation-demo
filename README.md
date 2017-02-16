@@ -1,7 +1,18 @@
 # Kubernetes Federation Demo
 
-- 
-{:toc}
+* [Requirements](#requirements)
+    * [Install the latest Kubernetes command line tools](#install-the-latest-kubernetes-command-line-tools)
+    * [Create a fresh GCP project](#create-a-fresh-gcp-project)
+    * [Generate a key for the GCP service account](#generate-a-key-for-the-gcp-service-account)
+* [Preparing the demo](#preparing-the-demo)
+    * [Create the clusters and deploy the demo application](#create-the-clusters-and-deploy-the-demo-application)
+    * [Explore the demo](#explore-the-demo)
+    * [Generate traffic](#generate-traffic)
+* [Demo time](#demo-time)
+* [Simulating the demo](#simulating-the-demo)
+* [Known Issues](#known-issues)
+* [Modifying the demo](#modifying-the-demo)
+
 
 ## Requirements
 
@@ -42,12 +53,14 @@ You can generate it under *IAM & Admin* / *Service accounts*. Select *Create key
 
 2. Create the clusters:
 
+    **Please note:** As of this writing, you have so manually create some firewall rules first. See [Known Issues](#known-issues).
+
     Change folder to `scripts`
 
     ```
     ./init.sh
     ```
-    **Note:** this operation takes a long time
+    *This operation make take a long time.*
 
 3. Initialise the federation:    
 
@@ -121,21 +134,19 @@ Just build and run the binary in `ADMIN` mode, then open your browser and add `?
 
 You can modify the demo by changing the canned JSON responses in `static/simulate.js`.
 
-
 ## Known Issues
 
-Some firewall rules need to be setup manually:
+Some firewall rules need to be setup manually. Assuming you have clusters in `us-east1-b`, `europe-west1-b` and `asia-east1-a`,
+the first step is to retrieve the ports to open:
 
-First step is to retrieve the ports to open via:
+    FED_PROJECT=your_gcp_project
+    kubectl --context=${FED_PROJECT}_us-east1-b_gce-us-east1-b --namespace=kube-system get services
+    kubectl --context=${FED_PROJECT}_europe-west1-b_gce-europe-west1-b --namespace=kube-system get services
+    kubectl --context=${FED_PROJECT}_asia-east1-a_gce-asia-east1-a --namespace=kube-system get services
 
-    kubectl --context=gke_steam-ego-156812_us-east1-b_gce-us-east1-b --namespace=kube-system get services
-    kubectl --context=gke_steam-ego-156812_europe-west1-b_gce-europe-west1-b --namespace=kube-system get services
-    kubectl --context=gke_steam-ego-156812_asia-east1-a_gce-asia-east1-a --namespace=kube-system get services
+The ports to open are listed under: `default-http-backend` service. They are usually higher than 30000.
 
-The ports to open are listed under: `default-http-backend` service.
-It usually is higher than 30000.
-
-Then run the following command: (please change the ports accordingly)
+Then run the following command: *(please change the ports accordingly)*
 
     gcloud compute firewall-rules create my-federated-ingress-firewall-rule --source-ranges 130.211.0.0/22 --allow "icmp,tcp:80,tcp:443,tcp:30451,tcp:31014,tcp:30699" --target-tags "cluster-europe-west1-b,cluster-asia-east1-a,cluster-us-east1-b" --network default
 
