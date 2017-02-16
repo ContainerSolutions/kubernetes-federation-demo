@@ -53,7 +53,7 @@ You can generate it under *IAM & Admin* / *Service accounts*. Select *Create key
 
 2. Create the clusters:
 
-    **Please note:** As of this writing, you have so manually create some firewall rules first. See [Known Issues](#known-issues).
+    **Please note:** As of this writing, you have to manually create some firewall rules first. See [Known Issues](#known-issues).
 
     Change folder to `scripts`
 
