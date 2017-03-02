@@ -1,43 +1,68 @@
 # Kubernetes Federation Demo
 
+* [Requirements](#requirements)
+    * [Install the latest Kubernetes command line tools](#install-the-latest-kubernetes-command-line-tools)
+    * [Create a fresh GCP project](#create-a-fresh-gcp-project)
+    * [Generate a key for the GCP service account](#generate-a-key-for-the-gcp-service-account)
+* [Preparing the demo](#preparing-the-demo)
+    * [Create the clusters and deploy the demo application](#create-the-clusters-and-deploy-the-demo-application)
+    * [Explore the demo](#explore-the-demo)
+    * [Generate traffic](#generate-traffic)
+* [Demo time](#demo-time)
+* [Simulating the demo](#simulating-the-demo)
+* [Known Issues](#known-issues)
+* [Modifying the demo](#modifying-the-demo)
+
+
 ## Requirements
 
-### Kubernetes command line tools
+### Install the latest Kubernetes command line tools
 
-Download the command line binaries located at: `https://github.com/kubernetes/kubernetes/blob/master/CHANGELOG.md#client-binaries`
-Install the binaries in your $PATH (Ex. /usr/local/sbin)
+Download the command line tools from [Github](https://github.com/kubernetes/kubernetes/blob/master/CHANGELOG.md#client-binaries) and 
+install them in your `$PATH` (e.g. `/usr/local/sbin`).
 
-### GKE secret key
-Generate a Google platform secret key, in JSON format and store it in this location: `$HOME/.federation-key.json`
+### Create a fresh GCP project
 
-### Preparing the demo
+Create a new project in your [Google Cloud Console](https://console.cloud.google.com/) and note down the project name.
 
-## Setup GKE clusters in different regions
+### Generate a key for the GCP service account
 
-*WARNING:* this creates several clusters in Google Cloud Platform! Watch out for your billing! /!\
+Generate a Google Cloud Platform secret key in JSON format and store it in this location: `$HOME/.federation-key.json`.
+You can generate it under *IAM & Admin* / *Service accounts*. Select *Create key* from the menu next to the default service account.
 
-### Build and push the docker image for the demo application
-Adjust the version of the image inside the Dockerfile.
+## Preparing the demo
 
-1. make push
+**WARNING:** this creates several clusters in Google Cloud Platform! Watch out for your billing!
 
 ### Create the clusters and deploy the demo application
 
 1. make sure `kubefed` and `kubectl` are in `$PATH`
 
-2. Reserve a couple of global IP adddress
+2. Adjust some variables:
+
+    Change `FED_PROJECT` and `FED_DNS_ZONE` in the `Makefile` and in `scripts/settings.source` to match your GCE project name 
+    and some domain name that you can control (although actually changing DNS configuration it is not required for this demo).
+
+2. Reserve two global IP adddress:
 
     ```
     gcloud compute addresses create kubernetes-ingress --global
     gcloud compute addresses create geoserver-admin --global
     ```
+    Note down those IPs, they are needed later.
+
+2. Create the clusters:
+
+    **Please note:** As of this writing, you have to manually create some firewall rules first. See [Known Issues](#known-issues).
 
 3. Create the clusters: (WARNING: this operation takes a long time)
+
     Change folder to `scripts`
 
     ```
     ./init.sh
-    ```   
+    ```
+    *This operation make take a long time.*
 
 4. Update the local kubeconfig file    
 
@@ -71,7 +96,7 @@ Adjust the version of the image inside the Dockerfile.
     kubectl --context=federation create -f manifests/geoserver-replica.yaml
     ```
 
-9. Deploy the map
+9. Deploy the demo application:
 
     ```
     kubectl --context=federation create -f manifests/geoserver-admin.yaml    
@@ -82,23 +107,23 @@ Adjust the version of the image inside the Dockerfile.
 Point your browser to the IP address you generated in step 2 (geoserver-admin).
 You can always find it again later by executing:
 
-    `gcloud compute addresses list | grep geoserver-admin`
+    gcloud compute addresses list | grep geoserver-admin
 
 You should see the clusters appearing on a map, but no traffic yet.
 
-#### Generate traffic
+### Generate traffic
 
 The script `scripts/start-traffic.sh` will create a micro-instance in the desired Google 
 datacenter and execute a small script that generates traffic on the federated cluster.
-Launch is as often as you want with different regions as argument.
+Launch it as often as you want with different regions as argument.
 
 **Important:** Do not launch it in the same regions as the Kubernetes clusters, as this will not
 work nicely with the Maps user interface.
 
 The required arguments are the region where to generate traffic from, the IP address 
-of the global ingress load balancer (from step 2) and the IP address of the admin service (FIXME where do you find it easily?).
+of the global ingress load balancer and the IP address of the admin service (from step 2 above).
 
-    # replace the two IP addresses with your own defined in point 2:
+    # replace the two IP addresses with your own created in step 2:
     scripts/start-traffic.sh asia-northeast1 130.211.41.245 104.155.43.73
     scripts/start-traffic.sh us-central1 130.211.41.245 104.155.43.73
 
@@ -111,17 +136,44 @@ You can now move around the map, and enable or disable either clusters or traffi
 You should see the traffic numbers in the statistics window changing and lines between traffic sources and datacenters, 
 depending on what the next healthy datacenter to a traffic source is.
 
+## Simulating the demo
+
+If you don't want to or can't create a cluster, or if you want to hack on the map frontend, you can simulate the demo.
+Just build and run the binary in `ADMIN` mode, then open your browser and add `?simulate` to the URL:
+
+    make build
+    ADMIN=1 ./kubernetes-federation-demo
+    open http://localhost:8080/?simulate
+
+You can modify the demo by changing the canned JSON responses in `static/simulate.js`.
+
 ## Known Issues
 
-Some firewall rules need to be setup manually:
+Some firewall rules need to be setup manually. Assuming you have clusters in `us-east1-b`, `europe-west1-b` and `asia-east1-a`,
+the first step is to retrieve the ports to open:
 
 Run the following command:
 ```
     gcloud compute firewall-rules create my-federated-ingress-firewall-rule --source-ranges 130.211.0.0/22 --allow "icmp,tcp:80,tcp:443,tcp:30000-33000" --target-tags "cluster-europe-west1-b,cluster-asia-east1-a,cluster-us-east1-b" --network default
-```    
+```
 
 See also:
 
 - https://github.com/kubernetes/kubernetes/issues/37306
+
+## Modifying the demo
+
+1. Make sure you have a DockerHub or GCR account
+
+    If you haven't got a DockerHub account yet, create one at [hub.docker.com](https://hub.docker.com/).
+    Alternatively, you should be equally successful using the [Google Container Registry](https://cloud.google.com/container-registry/).
+
+2. Adjust the IMAGE variable
+
+    Change the `IMAGE` variable in the `Makefile` to match your own image registry account.
+
+3. Make your changes to the code, then build and push
+
+    `make push`
 
 ---
