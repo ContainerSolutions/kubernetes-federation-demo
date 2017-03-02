@@ -1,0 +1,66 @@
+---
+### Deployment of the geoserver containers
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: geoserver-admin
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        name: geoserver-admin 
+        app: geoserver-admin
+    spec:
+      containers:
+      - name: geoserver-admin
+        image: containersoluploader/geoserver:0.7.2
+        imagePullPolicy: Always
+        volumeMounts:
+        - name: federation
+          mountPath: "/etc/federation"
+          readOnly: true
+        ports:
+        - containerPort: 8080
+        livenessProbe:
+          httpGet:
+            # Path to probe; should be cheap, but representative of typical behavior
+            path: /live
+            port: 8080
+          initialDelaySeconds: 10
+          timeoutSeconds: 1
+        readinessProbe:
+          httpGet:            
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 10
+          timeoutSeconds: 1
+        env:
+        - name: ADMIN
+          value: "1"
+        - name: CLUSTERS
+          value: "{\"gce-asia-east1-a\":\"104.155.211.139\",\"gce-europe-west1-b\":\"35.187.42.26\",\"gce-us-east1-b\":\"104.196.206.13\"}"
+      volumes:
+        - name: federation
+          secret:
+            secretName: federation-apiserver-credentials
+
+---
+### Deployment of the service
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: geoserver-admin
+  name: geoserver-admin  
+spec:
+  ports:
+  - port: 80
+    protocol: TCP
+    targetPort: 8080
+    name: http
+  selector:
+    app: geoserver-admin
+  type: LoadBalancer
+  loadBalancerIP: 104.155.43.73
+  sessionAffinity: ClientIP

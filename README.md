@@ -32,27 +32,38 @@ Adjust the version of the image inside the Dockerfile.
     gcloud compute addresses create geoserver-admin --global
     ```
 
-2. Create the clusters: (WARNING: this operation takes a long time)
+3. Create the clusters: (WARNING: this operation takes a long time)
     Change folder to `scripts`
 
     ```
     ./init.sh
     ```   
 
-3. Initialise the federation:    
+4. Update the local kubeconfig file    
+
+    ```
+    ./credentials.sh
+    ```   
+
+5. Initialise the federation:    
 
     ```
     ./init-federation.sh
     ```   
 
-4. Join the clusters together:
+6. Join the clusters together:
 
     ```
     ./join.sh
     ```   
 
+7. Setup the variable to the `geoserver-admin` manifest for handling the federation via API calls.
 
-5. Deploy Federated Service and Ingress and the federated application
+    ```
+    ./clusters
+    ```
+
+8. Deploy Federated Service and Ingress and the federated application
 
     ```
     kubectl --context=federation create -f manifests/geoserver-service.yaml
@@ -60,7 +71,7 @@ Adjust the version of the image inside the Dockerfile.
     kubectl --context=federation create -f manifests/geoserver-replica.yaml
     ```
 
-6. Deploy the map
+9. Deploy the map
 
     ```
     kubectl --context=federation create -f manifests/geoserver-admin.yaml    
@@ -104,17 +115,10 @@ depending on what the next healthy datacenter to a traffic source is.
 
 Some firewall rules need to be setup manually:
 
-First step is to retrieve the ports to open via:
-
-- `kubectl --context=gke_steam-ego-156812_us-east1-b_gce-us-east1-b --namespace=kube-system get services`
-- `kubectl --context=gke_steam-ego-156812_europe-west1-b_gce-europe-west1-b --namespace=kube-system get services`
-- `kubectl --context=gke_steam-ego-156812_asia-east1-a_gce-asia-east1-a --namespace=kube-system get services`
-
-The ports to open are listed under: `default-http-backend` service.
-It usually is higher than 30000.
-
-Then run the following command: (please change the ports accordingly)    
-    gcloud compute firewall-rules create my-federated-ingress-firewall-rule --source-ranges 130.211.0.0/22 --allow "icmp,tcp:80,tcp:443,tcp:30451,tcp:31014,tcp:30699" --target-tags "cluster-europe-west1-b,cluster-asia-east1-a,cluster-us-east1-b" --network default
+Run the following command:
+```
+    gcloud compute firewall-rules create my-federated-ingress-firewall-rule --source-ranges 130.211.0.0/22 --allow "icmp,tcp:80,tcp:443,tcp:30000-33000" --target-tags "cluster-europe-west1-b,cluster-asia-east1-a,cluster-us-east1-b" --network default
+```    
 
 See also:
 

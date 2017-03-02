@@ -70,8 +70,8 @@ func getIPAdress(r *http.Request) string {
 		return ""
 	}
 
-	log.Printf("Request: %s - %s\n", r.Header.Get("X-Forwarded-For"), r.Header.Get("X-Real-Ip"))
-	log.Printf("Remote: %s\n", r.RemoteAddr)
+	//log.Printf("Request: %s - %s\n", r.Header.Get("X-Forwarded-For"), r.Header.Get("X-Real-Ip"))
+	//log.Printf("Remote: %s\n", r.RemoteAddr)
 
 	for _, h := range []string{"X-Forwarded-For", "X-Real-Ip"} {
 		addresses := strings.Split(r.Header.Get(h), ",")

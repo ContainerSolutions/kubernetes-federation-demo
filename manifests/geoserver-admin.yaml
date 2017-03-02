@@ -14,8 +14,12 @@ spec:
     spec:
       containers:
       - name: geoserver-admin
-        image: containersoluploader/geoserver:0.4.8
+        image: containersoluploader/geoserver:0.8.0
         imagePullPolicy: Always
+        volumeMounts:
+        - name: federation
+          mountPath: "/etc/federation"
+          readOnly: true
         ports:
         - containerPort: 8080
         livenessProbe:
@@ -34,6 +38,15 @@ spec:
         env:
         - name: ADMIN
           value: "1"
+        - name: CLUSTERS
+          value: "gce-asia-east1-a=104.155.211.139,gce-europe-west1-b=35.187.42.26,gce-us-east1-b=104.196.206.13"
+        - name: FEDERATION_IP
+          value: "104.155.18.42"
+      volumes:
+        - name: federation
+          secret:
+            secretName: federation-apiserver-credentials
+
 ---
 ### Deployment of the service
 apiVersion: v1

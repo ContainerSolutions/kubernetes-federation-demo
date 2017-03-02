@@ -1,13 +1,16 @@
 package main
 
 import (
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"io"
 	"log"
 	"net"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 )
 
@@ -18,13 +21,21 @@ const (
 	GCE
 )
 
-// Cloud Provider ENUM
-type CloudProvider uint8
-
 var (
 	openBrace  = byte('(')
 	closeBrace = byte(')')
 )
+
+// Cloud Provider ENUM
+type CloudProvider uint8
+
+type cluster struct {
+	Name   string
+	IP     string
+	Joined bool
+}
+
+type clusters []cluster
 
 // ==============================
 type templateData struct {
@@ -42,6 +53,8 @@ type api struct {
 	mutex               sync.Mutex
 	mutexTraffic        sync.Mutex
 	mutexTrafficCounter sync.Mutex
+	federation          *federationManager
+	clusters            clusters
 }
 
 // Create a new API struct
@@ -55,7 +68,7 @@ func NewAPI(apiConfig *ApiConfig, serviceConfig *ServiceConfig, adminConfig *Adm
 		remoteHost = "localhost:8081" // for local development
 	}
 
-	return &api{
+	api := api{
 		config:              apiConfig,
 		serviceConfig:       serviceConfig,
 		adminConfig:         adminConfig,
@@ -65,6 +78,17 @@ func NewAPI(apiConfig *ApiConfig, serviceConfig *ServiceConfig, adminConfig *Adm
 		mutexTraffic:        sync.Mutex{},
 		mutexTrafficCounter: sync.Mutex{},
 	}
+
+	// set the federation manager if the FEDERATION_IP
+	if adminConfig.federationIP != "" {
+		log.Println("FEDERATION_IP:", adminConfig.federationIP)
+		api.federation = NewFederationManager(adminConfig.federationIP)
+	}
+	if adminConfig.clusters != "" {
+		api.clusters = parseClusters(adminConfig.clusters)
+	}
+
+	return &api
 }
 
 // Start the API: both the admin and the services
@@ -73,6 +97,12 @@ func (api *api) Start() {
 
 	http.HandleFunc("/favicon.ico", api.faviconHandlerFunc)
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("./static"))))
+
+	// used for signaling that the conatiner is up and running
+	http.HandleFunc("/live", api.liveHandlerFunc)
+
+	// used for signaling that the conatiner is ready to receive requests
+	http.HandleFunc("/ready", api.readyHandlerFunc)
 
 	if api.config.isAdmin {
 		// Add zone handler
@@ -94,6 +124,11 @@ func (api *api) Start() {
 
 		http.HandleFunc("/trafficSourceActive", api.trafficSourceActive)
 
+		// simple GET entry points
+		http.HandleFunc("/federation/clusters", api.clustersHandlerFunc)
+		http.HandleFunc("/federation/add", api.federationAddHandlerFunc)
+		http.HandleFunc("/federation/remove", api.federationRemoveHandlerFunc)
+
 	} else {
 
 		indexHandler := http.HandlerFunc(api.indexHandlerFunc)
@@ -103,12 +138,6 @@ func (api *api) Start() {
 
 		// Service to get the data
 		http.HandleFunc("/location", api.zoneHandlerFunc)
-
-		// used for signaling that the conatiner is up and running
-		http.HandleFunc("/live", api.liveHandlerFunc)
-
-		// used for signaling that the conatiner is ready to receive requests
-		http.HandleFunc("/ready", api.readyHandlerFunc)
 
 		// disable the readyness
 		http.HandleFunc("/disable", api.disableHandlerFunc)
@@ -171,6 +200,62 @@ func (api *api) requestsMiddleware(next http.Handler) http.Handler {
 // ##### ADMIN
 // =============================================================
 
+func (api *api) clustersHandlerFunc(w http.ResponseWriter, r *http.Request) {
+
+	all := api.federation.AllClusters()
+
+	for _, federatedCluster := range all.Entries {
+
+		for index, staticCluster := range api.clusters {
+			if federatedCluster.Meta.Name == staticCluster.Name {
+				log.Println("Found federated cluster:", federatedCluster.Meta.Name)
+				api.clusters[index].Joined = true
+			}
+		}
+	}
+
+	data := api.clusters.toJson()
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(data)
+
+}
+
+func (api *api) federationAddHandlerFunc(w http.ResponseWriter, r *http.Request) {
+	clusterName := r.URL.Query().Get("name")
+
+	if clusterName != "" {
+		// retrieve the IP
+		ip := api.clusters.findIP(clusterName)
+		if ip != "" && api.federation != nil {
+			if ok := api.federation.AddCluster(clusterName, ip); ok {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+		}
+	}
+
+	w.WriteHeader(http.StatusInternalServerError)
+
+}
+
+func (api *api) federationRemoveHandlerFunc(w http.ResponseWriter, r *http.Request) {
+	clusterName := r.URL.Query().Get("name")
+
+	if clusterName != "" {
+		// retrieve the IP
+		ip := api.clusters.findIP(clusterName)
+		if ip != "" && api.federation != nil {
+			if ok := api.federation.RemoveCluster(clusterName); ok {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+		}
+	}
+
+	w.WriteHeader(http.StatusInternalServerError)
+
+}
+
 func (api *api) adminIndexHandlerFunc(w http.ResponseWriter, r *http.Request) {
 	t, err := template.ParseFiles("templates/admin.html")
 	if err != nil {
@@ -226,8 +311,6 @@ func (api *api) adminHandlerFunc(w http.ResponseWriter, r *http.Request) {
 
 func (api *api) pingHandlerFunc(w http.ResponseWriter, r *http.Request) {
 
-	log.Println("Got heartbeat:", getIPAdress(r))
-
 	if r.Body == nil {
 		http.Error(w, "Missing request body", 400)
 		return
@@ -243,8 +326,6 @@ func (api *api) pingHandlerFunc(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-
-	log.Printf("PING %s\n", z)
 
 	if z.Name != "" {
 		if value, ok := api.datacenters[z.Name]; ok {
@@ -268,7 +349,7 @@ func (api *api) pingHandlerFunc(w http.ResponseWriter, r *http.Request) {
 		log.Printf("NOT Found: %s\n", existingZone)
 	}
 
-	log.Println("Zone", existingZone.Name, "updated traffic:", existingZone.Traffic)
+	//log.Println("Zone", existingZone.Name, "updated traffic:", existingZone.Traffic)
 
 	// update the in memory info
 	api.adminConfig.adminPanel.ping(existingZone)
@@ -309,6 +390,12 @@ func (api *api) indexHandlerFunc(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *api) zoneIndexHandlerFunc(w http.ResponseWriter, r *http.Request) {
+
+	if r.URL.Path != "/" {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
 	t, err := template.ParseFiles("templates/index.html")
 	if err != nil {
 		log.Fatal("Error parsing admin template files ", err)
@@ -405,4 +492,57 @@ func (api *api) writeReadyness(w http.ResponseWriter) {
 
 func remove(slice []*zone, s int) []*zone {
 	return append(slice[:s], slice[s+1:]...)
+}
+
+func parseClusters(clustersEnv string) clusters {
+	var clusters []cluster
+	if clustersEnv == "" {
+		return clusters
+	}
+	log.Println("Parsing clusters:", clustersEnv)
+
+	r := csv.NewReader(strings.NewReader(clustersEnv))
+
+	for {
+		records, err := r.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			log.Println(err)
+			break
+		}
+
+		for _, record := range records {
+			tokens := strings.Split(record, "=")
+			if len(tokens) > 0 {
+				clusters = append(clusters, cluster{Name: strings.Replace(tokens[0], "gce", "cluster", 1), IP: tokens[1]})
+			}
+		}
+
+	}
+
+	log.Println("Parsed clusters", clusters)
+
+	return clusters
+}
+
+func (c clusters) toJson() []byte {
+	var data []byte
+
+	jsonData, err := json.Marshal(c)
+	if err != nil {
+		return data
+	}
+
+	return jsonData
+}
+
+func (c clusters) findIP(name string) string {
+	for _, cluster := range c {
+		if cluster.Name == name {
+			return cluster.IP
+		}
+	}
+	return ""
 }

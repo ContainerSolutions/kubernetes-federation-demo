@@ -13,5 +13,5 @@ export FED_PROJECT=steam-ego-156812
 export FED_DNS_ZONE=container-solutions-trainings.com
 
 # Sets the cluster version - at the time of writing 1.5.2 is the latest
-export CLUSTER_VERSION=1.5.2
+export CLUSTER_VERSION=1.5.3
 

@@ -1,5 +1,5 @@
 IMAGE=containersoluploader/geoserver
-VERSION=0.4.8
+VERSION=0.8.0
 FED_PROJECT=steam-ego-156812
 
 build:
@@ -15,10 +15,10 @@ europe:
 	gcloud container clusters get-credentials gce-europe-west1-b --zone europe-west1-b --project ${FED_PROJECT}
 
 deploy-admin: europe        
-	kubectl create -f manifests/geoserver-admin.yaml
+	kubectl --namespace=federation-system create -f manifests/geoserver-admin.yaml	
 
 destroy-admin: europe
-	kubectl delete -f manifests/geoserver-admin.yaml
+	kubectl --namespace=federation-system delete -f manifests/geoserver-admin.yaml
 
 deploy-replica:
 	kubectl --context=federation create -f manifests/geoserver-replica.yaml
@@ -36,7 +36,9 @@ destroy:
 	kubectl --context=federation delete -f manifests/geoserver-ingress.yaml
 	kubectl --context=federation delete -f manifests/geoserver-service.yaml
 	kubectl --context=federation delete -f manifests/geoserver-replica.yaml
-	kubectl delete ns federation-system
+	kubectl --context=federation delete ns federation-system
+	gcloud container clusters get-credentials gce-europe-west1-b --zone europe-west1-b --project ${FED_PROJECT}
+	kubectl delete -f manifests/geoserver-admin.yaml
 	
 
 all: build

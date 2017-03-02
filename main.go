@@ -41,7 +41,8 @@ func main() {
 	if apiConfig.isAdmin {
 		registry := NewRegistryService()
 		adminConfig.registryService = registry
-
+		adminConfig.federationIP = os.Getenv("FEDERATION_IP")
+		adminConfig.clusters = os.Getenv("CLUSTERS")
 		adminConfig.adminPanel = NewAdminPanel()
 
 	} else {
