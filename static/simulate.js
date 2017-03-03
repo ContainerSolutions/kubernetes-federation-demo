@@ -48,14 +48,14 @@
         return !!trafficSources[name];
     };
 
-    let ticker = null, traffic = {};
+    let dcTicker = null, clusterTicker = null, traffic = {};
 
     Backend.init = function() {
         console.log("Initializing simulated backend");
         window.setTimeout(function() {
             Backend.updateDCs(Object.values(cannedDatacenters));
         }, 250);
-        ticker = window.setInterval(function() {
+        dcTicker = window.setInterval(function() {
             try {
                 let sources = activeSources(), src, updates = [], updatedNames = [];
                 while (src = sources.shift()) {
@@ -76,17 +76,20 @@
                 if (updates.length) {
                     Backend.updateDCs(updates);
                 }
-                Backend.updateFederation(allClusters.map(function(c) { return cloneObj(c); }));
             } catch(e) {
                 Backend.stop();
                 throw(e);
             }
         }, randInt(100) + 500);
+        clusterTicker = window.setInterval(function() {
+            Backend.updateFederation(allClusters.map(function(c) { return cloneObj(c); }));
+        }, randInt(100) + 4500);
     };
 
     Backend.stop = function() {
         console.log("Stopping simulated backend");
-        window.clearInterval(ticker);
+        window.clearInterval(dcTicker);
+        window.clearInterval(clusterTicker);
     };
 
     function cloneObj(dc) {
