@@ -273,7 +273,7 @@ func (api *api) stopTraffic(w http.ResponseWriter, r *http.Request) {
 
 	if dc != "" {
 		api.mutexTraffic.Lock()
-		api.traffic[dc] = true
+		api.traffic[dc] = false
 		api.mutexTraffic.Unlock()
 		log.Println("Traffic from", dc, "disabled.")
 	}
