@@ -3,7 +3,7 @@ FED_PROJECT=steam-ego-156812
 
 # Image name in version
 IMAGE=containersoluploader/geoserver
-VERSION=0.8.2
+VERSION=0.8.5
 
 build:
 	go build

@@ -35,7 +35,7 @@ type cluster struct {
 	Joined bool
 }
 
-type clusters []cluster
+type clusters []*cluster
 
 // ==============================
 type templateData struct {
@@ -200,17 +200,18 @@ func (api *api) requestsMiddleware(next http.Handler) http.Handler {
 
 func (api *api) clustersHandlerFunc(w http.ResponseWriter, r *http.Request) {
 
-	all := api.federation.AllClusters()
+	federatedClusters := api.federation.AllClusters()
 
-	for _, federatedCluster := range all.Entries {
+	for _, staticCluster := range api.clusters {
 
-		for index, staticCluster := range api.clusters {
+		for _, federatedCluster := range federatedClusters.Entries {
+			// reset the joined flag
+			staticCluster.Joined = false
+
 			if federatedCluster.Meta.Name == staticCluster.Name {
 				log.Println("Found federated cluster:", federatedCluster.Meta.Name)
-				api.clusters[index].Joined = true
+				staticCluster.Joined = true
 				break
-			} else {
-				api.clusters[index].Joined = false
 			}
 		}
 	}
@@ -488,7 +489,7 @@ func remove(slice []*zone, s int) []*zone {
 }
 
 func parseClusters(clustersEnv string) clusters {
-	var clusters []cluster
+	var clusters []*cluster
 	if clustersEnv == "" {
 		return clusters
 	}
@@ -509,7 +510,7 @@ func parseClusters(clustersEnv string) clusters {
 		for _, record := range records {
 			tokens := strings.Split(record, "=")
 			if len(tokens) > 0 {
-				clusters = append(clusters, cluster{Name: strings.Replace(tokens[0], "gce", "cluster", 1), IP: tokens[1]})
+				clusters = append(clusters, &cluster{Name: strings.Replace(tokens[0], "gce", "cluster", 1), IP: tokens[1]})
 			}
 		}
 
