@@ -108,8 +108,6 @@ func (api *api) Start() {
 		// Add zone handler
 		http.HandleFunc("/ping", api.pingHandlerFunc)
 
-		http.HandleFunc("/admin", api.adminIndexHandlerFunc)
-
 		http.HandleFunc("/", api.zoneIndexHandlerFunc)
 
 		http.HandleFunc("/services", api.adminHandlerFunc)
@@ -254,14 +252,6 @@ func (api *api) federationRemoveHandlerFunc(w http.ResponseWriter, r *http.Reque
 
 	w.WriteHeader(http.StatusInternalServerError)
 
-}
-
-func (api *api) adminIndexHandlerFunc(w http.ResponseWriter, r *http.Request) {
-	t, err := template.ParseFiles("templates/admin.html")
-	if err != nil {
-		log.Fatal("Error parsing admin template files ", err)
-	}
-	t.Execute(w, api.templateData)
 }
 
 func (api *api) startTraffic(w http.ResponseWriter, r *http.Request) {
