@@ -24,6 +24,16 @@
         return promise;
     };
 
+    Backend.join = function(name) {
+        cannedClusters[name].Joined = true;
+        return promise;
+    };
+
+    Backend.unjoin = function(name) {
+        cannedClusters[name].Joined = false;
+        return promise;
+    };
+
     Backend.startTraffic = function(sourceName) {
         trafficSources[sourceName] = true;
         return promise;
@@ -52,7 +62,7 @@
                     let dc = nearestHealthyDC(src);
                     if (!dc) continue;
                     
-                    let update = cloneDC(dc);
+                    let update = cloneObj(dc);
                     update["Traffic"] = randomTraffic(src, dc);
                     updates.push(update);
                     updatedNames.push(update.IpAddress.dc);
@@ -60,12 +70,13 @@
                 let name;
                 while(name = recentlyChanged.shift()) {
                     if (updatedNames.indexOf(name) == -1) {
-                        updates.push(cloneDC(cannedDatacenters[name]));
+                        updates.push(cloneObj(cannedDatacenters[name]));
                     }
                 }
                 if (updates.length) {
                     Backend.updateDCs(updates);
                 }
+                Backend.updateFederation(allClusters.map(function(c) { return cloneObj(c); }));
             } catch(e) {
                 Backend.stop();
                 throw(e);
@@ -78,7 +89,7 @@
         window.clearInterval(ticker);
     };
 
-    function cloneDC(dc) {
+    function cloneObj(dc) {
         return $.extend(true, {}, dc);
     }
 
@@ -95,7 +106,9 @@
     }
 
     function nearestHealthyDC(src) {
-        let healthy = Object.values(cannedDatacenters).filter(function(dc) { return dc.Ready; }).map(function(dc) { return dc.IpAddress.dc; });
+        let healthy = Object.values(cannedDatacenters)
+            .filter(function(dc) { return dc.Ready && cannedClusters[dc.IpAddress.dc].Joined; })
+            .map(function(dc) { return dc.IpAddress.dc; });
         for (let d of nearestDCs[src]) if (healthy.indexOf(d) > -1) return cannedDatacenters[d];
     }
 
@@ -133,5 +146,13 @@
     };
 
     const cannedDatacenters = { "europe-west1": dcEurope, "asia-east1": dcAsia, "us-east1": dcUS };
+
+    const clusterAsia = {"Name":"cluster-asia-east1-a","IP":"104.155.211.139","Joined":true};
+    const clusterEurope = {"Name":"cluster-europe-west1-b","IP":"35.187.42.26","Joined":true};
+    const clusterUS = {"Name":"cluster-us-east1-b","IP":"104.196.206.13","Joined":true}
+
+    const allClusters = [clusterAsia, clusterEurope, clusterUS];
+    
+    const cannedClusters = { "europe-west1": clusterEurope, "asia-east1": clusterAsia, "us-east1": clusterUS };
 
 })();

@@ -1,6 +1,9 @@
+# *** CHANGE THIS *** (Google Cloud project name)
+FED_PROJECT=steam-ego-156812
+
+# Image name in version
 IMAGE=containersoluploader/geoserver
 VERSION=0.8.0
-FED_PROJECT=steam-ego-156812
 
 build:
 	go build

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# This script must run from within a VM inside Google Compute Engine.
 
 die() { echo "$@" 1>&2 ; exit 1; }
 

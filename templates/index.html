@@ -94,8 +94,8 @@
 
         const providers = ['aws', 'azure', 'gce'];
 
-        let dcChangeCallbacks = [], trafficCallbacks = [];
-        let datacenters = {}, allTraffic = {}, stoppedTrafficSources = {};
+        let dcChangeCallbacks = [], trafficCallbacks = [], clusterChangeCallbacks = [];
+        let datacenters = {}, allTraffic = {}, stoppedTrafficSources = {}, clusters = {};
         
         let backend = this;
 
@@ -105,6 +105,14 @@
 
         this.enable = function(name) {
             return execCmd("enable", name);
+        };
+
+        this.join = function(name) {
+            return execCmd("federation/add", clusters[name].Name, "name");
+        };
+
+        this.unjoin = function(name) {
+            return execCmd("federation/remove", clusters[name].Name, "name");
         };
 
         this.startTraffic = function(sourceName) {
@@ -123,9 +131,24 @@
             console.log("Initializing backend");
             window.setInterval(function() {
                 // would be nicer to do a Websocket here...
-                $.getJSON("/services").done(backend.updateDCs);
+                $.getJSON("/services").done(backend.updateDCs)
+                    .always(function() {
+                        $.getJSON('/federation/clusters').done(backend.updateFederation);
+                    });
             }, 500);
         };
+
+        const clusterRE = /^cluster\-(.*)\-\w+$/;
+
+        this.updateFederation = function(data) {
+            for (let cluster of data) {
+                let name = clusterRE.exec(cluster.Name)[1];
+                if (clusters[name] && clusters[name].Joined != cluster.Joined) {
+                    for (let fun of clusterChangeCallbacks) fun(name, cluster.Joined);
+                }
+                clusters[name] = cluster;
+            }
+        }
 
         this.updateDCs = function(data) {
             let [delta, traffic] = processDCUpdate(data);
@@ -144,6 +167,10 @@
         this.onTraffic = function(fun) {
             trafficCallbacks.push(fun);
         };
+
+        this.onClusterChange = function(fun) {
+            clusterChangeCallbacks.push(fun);
+        }
 
         this.getDatacenter = function(name) {
             return datacenters[name];
@@ -200,8 +227,8 @@
             return new google.maps.LatLng(ll[0], ll[1]);
         }
 
-        function execCmd(cmd, dcName) {
-            return $.get("/" + cmd + "?dc=" + dcName);
+        function execCmd(cmd, name, param) {
+            return $.get("/" + cmd + "?" + (param || "dc") + "=" + name);
         }
 
     }();
@@ -236,7 +263,7 @@
 
     let MapCanvas = new function() {
 
-        let map = null, infowdw = null, dcMarkers = {}, srcMarkers = {}, trafficLines = {};
+        let map = null, infowdw = null, dcMarkers = {}, srcMarkers = {}, trafficLines = {}, unJoined = {};
 
         let recentlyActive = {}, recentTraffic = {}, stats = {}, rps = {}, srcInfoDC = null;
 
@@ -256,6 +283,7 @@
             initMap();
             listenDCChanges();
             listenTrafficChanges();
+            listenClusterChanges();
             clearRecentlyActive();
             clearRecentTraffic();
             countRequestsPerSecond();
@@ -309,6 +337,14 @@
             });
         }
 
+        function listenClusterChanges() {
+            Backend.onClusterChange(function(name, joined) {
+                console.log("Cluster", name, joined ? "joined" : "unjoined", "the federation");
+                unJoined[name] = !joined;
+                joined ? markClusterJoined(name) : markClusterUnjoined(name);
+            });
+        }
+
         function countRequestsPerSecond() {
             let oldStats = {}, sampleDurationSec = 2;
             window.setInterval(function() {
@@ -349,8 +385,10 @@
         function updateStatsWindow() {
             let spans = [];
             Backend.eachDatacenter(function(dc) {
-                let [clazz, text] = dc.ready ? [Enabled, 'ready'] : [Disabled, 'down'];
-                spans.push('<span class="' + clazz + '">' + dc.name + ': ' + getStats(dc.name) + ' (' + formatRps(dc.name) + ')</span>');
+                if (!unJoined[dc.name]) {
+                    let [clazz, text] = dc.ready ? [Enabled, 'ready'] : [Disabled, 'down'];
+                    spans.push('<span class="' + clazz + '">' + dc.name + ': ' + getStats(dc.name) + ' (' + formatRps(dc.name) + ')</span>');
+                }
             });
             let html = 'Cluster traffic: ' + getStats(AllReqs) + ' (' + formatRps(AllReqs) + ')<hr>' + spans.join('<br>');
             $('#trafficInfo').html(html);
@@ -437,9 +475,21 @@
             dcMarkers[dc.name] = new google.maps.Marker({
                 map: map, position: dc.coords,
                 title: dc.displayName(),
-                icon: icon(dc)
+                icon: icon(dc), opacity: markerOpacity(dc.name)
             });
             addInfoWindow(dcMarkers[dc.name], dc.displayName(), dc.name, true);
+        }
+
+        function markerOpacity(name) {
+            return unJoined[name] ? 0.5 : 1.0;
+        }
+
+        function markClusterJoined(name) {
+            dcMarkers[name].setOpacity(1.0);
+        }
+        
+        function markClusterUnjoined(name) {
+            dcMarkers[name].setOpacity(0.5);
         }
 
         function drawSrcMarker(src) {
@@ -458,16 +508,12 @@
         }
 
         function addInfoWindow(marker, heading, name, isDC) {
-            let wdwHead = '<div class="infowindow"><strong>' + heading + '</strong><br>';
-            let wdwFoot = '</div>';
+            let head = '<div class="infowindow"><strong>' + heading + '</strong><br>';
+            let foot = '</div>';
             
-            let wdw = new google.maps.InfoWindow({ content: wdwHead + wdwFoot });
+            let wdw = new google.maps.InfoWindow({ content: head + foot });
             let rdy = wdw.addListener('domready', function() {
-                let active = isDC ? Backend.getDatacenter(name).ready : Backend.isActiveTrafficSource(name);
-                let domId = 'toggle_' + name + (isDC ? '_dc' : '_src');
-                wdw.setContent(wdwHead + toggleButton(domId, active) + wdwFoot);
-                observeButton($('#' + domId), name, isDC);
-                if (isDC) showSourceInfo(name);
+                isDC ? dcInfoWdw(wdw, name, head, foot) : srcInfoWdw(wdw, name, head, foot);
             });
             wdw.addListener('closeclick', hideSourceInfo);
             marker.addListener('click', function() {
@@ -477,38 +523,74 @@
             });
         }
 
-        function toggleButton(domId, active) {
-            let [clazz, text] = active ? [Enabled, 'Disable'] : [Disabled, 'Enable'];
+        function srcInfoWdw(wdw, name, head, foot) {
+            let active = Backend.isActiveTrafficSource(name);
+            let domId = 'toggle_' + name + '_src';
+            let btnTexts = ['Disable', 'Enable'];
+            wdw.setContent(head + toggleButton(domId, active, btnTexts) + foot);
+            observeButton($('#' + domId), name, btnTexts,
+                function() { return Backend.stopTraffic(name); },
+                function() { return Backend.startTraffic(name); },
+                function() { updateSrcMarker(name); }
+            );            
+        }
+
+        function dcInfoWdw(wdw, name, head, foot) {
+            let active = Backend.getDatacenter(name).ready;
+            let joinId = 'join_' + name, btn, toggleId = null;
+            let btnTextsToggle = ['Disable', 'Enable'], btnTextsJoin = ['Unjoin', 'Join'];
+            if (unJoined[name]) {
+                btn = toggleButton(joinId, false, btnTextsJoin);
+            } else {
+                toggleId = 'toggle_' + name + '_dc';
+                btn = toggleButton(toggleId, active, btnTextsToggle) + toggleButton(joinId, true, btnTextsJoin);
+            }
+            wdw.setContent(head + btn + foot);
+            if (toggleId) {
+                observeButton($('#' + toggleId), name, btnTextsToggle,
+                    function() { return Backend.disable(name); },
+                    function() { return Backend.enable(name); }
+                );
+            }
+            observeButton($('#' + joinId), name, btnTextsJoin, 
+                function() { return Backend.unjoin(name); },
+                function() { return Backend.join(name); }
+            );
+            if (!unJoined[name]) showSourceInfo(name);
+        }
+
+        function toggleButton(domId, active, btnTexts) {
+            let [clazz, text] = active ? [Enabled, btnTexts[0]] : [Disabled, btnTexts[1]];
             return '<a href="#" id="' + domId + '" class="toggle ' + clazz + '">' + text + '</a>';
         }
 
-        function observeButton($btn, name, isDC) {
+        function observeButton($btn, name, texts, disableCallback, enabledCallback, doneCallback) {
             $btn.click(function() {
                 if ($btn.hasClass(Waiting)) return false;
                 let promise = null, oldState = null;
                 if ($btn.hasClass(Enabled)) {
                     oldState = Enabled;
-                    promise = isDC ? Backend.disable(name) : Backend.stopTraffic(name);
+                    promise = disableCallback();
                 } else {
                     oldState = Disabled;
-                    promise = isDC ? Backend.enable(name) : Backend.startTraffic(name);
+                    promise = enabledCallback();
                 }
                 promise.fail(function(e) {
                     console.log("error executing", promise, "for", name, ":", e);
-                    resetButton($btn, oldState);
+                    resetButton($btn, oldState, texts);
                 }).done(function() {
                     closeInfowdw();
-                    if (!isDC) updateSrcMarker(name);
+                    if (doneCallback) doneCallback();
                 });
                 $btn.removeClass(oldState).addClass(Waiting).text('');
                 return false;
             });
         }
 
-        function resetButton($btn, state) {
+        function resetButton($btn, state, texts) {
             $btn.addClass(state);
             $btn.removeClass(Waiting);
-            $btn.text(state == Disabled ? 'Enable' : 'Disable');
+            $btn.text(texts[state == Enabled ? 1 : 0]);
         }
 
         function closeInfowdw() {

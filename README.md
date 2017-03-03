@@ -10,7 +10,6 @@
     * [Generate traffic](#generate-traffic)
 * [Demo time](#demo-time)
 * [Simulating the demo](#simulating-the-demo)
-* [Known Issues](#known-issues)
 * [Modifying the demo](#modifying-the-demo)
 
 
@@ -51,11 +50,17 @@ You can generate it under *IAM & Admin* / *Service accounts*. Select *Create key
     ```
     Note down those IPs, they are needed later.
 
-2. Create the clusters:
+2. Set up a firewall rule:
 
-    **Please note:** As of this writing, you have to manually create some firewall rules first. See [Known Issues](#known-issues).
+    Assuming you have clusters in `us-east1-b`, `europe-west1-b` and `asia-east1-a`, run:
 
-3. Create the clusters: (WARNING: this operation takes a long time)
+    ```
+    gcloud compute firewall-rules create my-federated-ingress-firewall-rule --source-ranges 130.211.0.0/22 --allow "icmp,tcp:80,tcp:443 tcp:30000-33000" --target-tags "cluster-europe-west1-b,cluster-asia-east1-a,cluster-us-east1-b" --network default
+    ```
+
+    See https://github.com/kubernetes/kubernetes/issues/37306 for the reason behind this step.
+
+3. Create the clusters:
 
     Change folder to `scripts`
 
@@ -146,20 +151,6 @@ Just build and run the binary in `ADMIN` mode, then open your browser and add `?
     open http://localhost:8080/?simulate
 
 You can modify the demo by changing the canned JSON responses in `static/simulate.js`.
-
-## Known Issues
-
-Some firewall rules need to be setup manually. Assuming you have clusters in `us-east1-b`, `europe-west1-b` and `asia-east1-a`,
-the first step is to retrieve the ports to open:
-
-Run the following command:
-```
-    gcloud compute firewall-rules create my-federated-ingress-firewall-rule --source-ranges 130.211.0.0/22 --allow "icmp,tcp:80,tcp:443,tcp:30000-33000" --target-tags "cluster-europe-west1-b,cluster-asia-east1-a,cluster-us-east1-b" --network default
-```
-
-See also:
-
-- https://github.com/kubernetes/kubernetes/issues/37306
 
 ## Modifying the demo
 
