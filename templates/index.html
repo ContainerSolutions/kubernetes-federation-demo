@@ -554,8 +554,8 @@
                 );
             }
             observeButton($('#' + joinId), name, btnTextsJoin, 
-                function() { return Backend.unjoin(name); },
-                function() { return Backend.join(name); }
+                function() { return Backend.unjoin(name).done(function() { unJoined[name] = true }); },
+                function() { return Backend.join(name).done(function() { unJoined[name] = false }); }
             );
             if (!unJoined[name]) showSourceInfo(name);
         }
