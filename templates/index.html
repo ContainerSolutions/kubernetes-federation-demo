@@ -143,7 +143,8 @@
         this.updateFederation = function(data) {
             for (let cluster of data) {
                 let name = clusterRE.exec(cluster.Name)[1];
-                if (clusters[name] && clusters[name].Joined != cluster.Joined) {
+                if (!clusters[name]) clusters[name] = { Joined: true }; 
+                if (clusters[name].Joined != cluster.Joined) {
                     for (let fun of clusterChangeCallbacks) fun(name, cluster.Joined);
                 }
                 clusters[name] = cluster;

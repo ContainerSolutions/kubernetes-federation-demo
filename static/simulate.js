@@ -148,7 +148,7 @@
     const cannedDatacenters = { "europe-west1": dcEurope, "asia-east1": dcAsia, "us-east1": dcUS };
 
     const clusterAsia = {"Name":"cluster-asia-east1-a","IP":"104.155.211.139","Joined":true};
-    const clusterEurope = {"Name":"cluster-europe-west1-b","IP":"35.187.42.26","Joined":true};
+    const clusterEurope = {"Name":"cluster-europe-west1-b","IP":"35.187.42.26","Joined":false};
     const clusterUS = {"Name":"cluster-us-east1-b","IP":"104.196.206.13","Joined":true}
 
     const allClusters = [clusterAsia, clusterEurope, clusterUS];
