@@ -129,13 +129,13 @@
 
         this.init = function() {
             console.log("Initializing backend");
+            // would be nicer to do a Websocket here...
             window.setInterval(function() {
-                // would be nicer to do a Websocket here...
-                $.getJSON("/services").done(backend.updateDCs)
-                    .always(function() {
-                        $.getJSON('/federation/clusters').done(backend.updateFederation);
-                    });
-            }, 500);
+                $.getJSON("/services").done(backend.updateDCs);
+            }, 543);
+            window.setInterval(function() {
+                $.getJSON('/federation/clusters').done(backend.updateFederation);
+            }, 4567);
         };
 
         const clusterRE = /^cluster\-(.*)\-\w+$/;
