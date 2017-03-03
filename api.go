@@ -208,6 +208,9 @@ func (api *api) clustersHandlerFunc(w http.ResponseWriter, r *http.Request) {
 			if federatedCluster.Meta.Name == staticCluster.Name {
 				log.Println("Found federated cluster:", federatedCluster.Meta.Name)
 				api.clusters[index].Joined = true
+				break
+			} else {
+				api.clusters[index].Joined = false
 			}
 		}
 	}
