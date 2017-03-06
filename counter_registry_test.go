@@ -82,3 +82,30 @@ func TestCounterIncrementZones(t *testing.T) {
 
 	assert.Equal(t, 12345+1, counter)
 }
+
+func TestresetCounter(t *testing.T) {
+	// Data preparation
+	zones := make(map[string]int64)
+	zone := "us-east-1"
+	zones[zone] = 12345
+
+	// Create the registry
+	cReg := NewCounterRegistry()
+	// increment of once the zone
+	cReg.Increment(zone)
+
+	// increment of many the zone
+	cReg.IncrementZones(zones)
+
+	// verify the counter
+	counter := cReg.Get(zone)
+
+	assert.Equal(t, 12345+1, counter)
+
+	cReg.ResetCounter()
+
+	counter = cReg.Get(zone)
+
+	assert.Equal(t, 0, counter)
+
+}

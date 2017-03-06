@@ -11,6 +11,7 @@ type CounterRegistryService interface {
 	ToJson() []byte                        // Returns a json representation of the counter
 	Get(zone string) int64
 	AllZones() map[string]int64 // returns the zones map
+	ResetCounter()
 }
 
 type counterRegistry struct {
@@ -33,6 +34,15 @@ func (r *counterRegistry) AllZones() map[string]int64 {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 	return r.Zones
+}
+
+func (r *counterRegistry) ResetCounter() {
+
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+	for key, _ := range r.Zones {
+		r.Zones[key] = 0
+	}
 }
 
 func (r *counterRegistry) Increment(zone string) {

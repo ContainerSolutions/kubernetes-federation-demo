@@ -74,6 +74,9 @@ func (h *heartbeat) ping(url string) {
 	// add the traffic information
 	h.apiConfig.zone.IncrementZones(h.apiConfig.traffic.AllZones())
 
+	// we need to reset the counter for the next batch
+	h.apiConfig.traffic.ResetCounter()
+
 	if data := h.apiConfig.zone.toJson(); len(data) > 0 {
 
 		// set the timestamp
