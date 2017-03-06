@@ -19,7 +19,7 @@ type ApiConfig struct {
 
 	isReady bool
 
-	traffic map[string]int64
+	traffic CounterRegistryService
 }
 
 type ServiceConfig struct {
@@ -34,7 +34,4 @@ type AdminConfig struct {
 	adminPanel   *AdminPanel
 	federationIP string
 	clusters     string
-
-	// registry sevice (used only in case we are in amdin mode)
-	registryService RegistryService
 }

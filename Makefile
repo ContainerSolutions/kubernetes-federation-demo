@@ -3,7 +3,7 @@ FED_PROJECT=steam-ego-156812
 
 # Image name in version
 IMAGE=containersoluploader/geoserver
-VERSION=0.8.5
+VERSION=0.9.0
 
 build:
 	go build
@@ -25,6 +25,9 @@ destroy-admin: europe
 
 deploy-replica:
 	kubectl --context=federation create -f manifests/geoserver-replica.yaml
+
+destroy-replica:
+	kubectl --context=federation delete -f manifests/geoserver-replica.yaml
 
 deploy-service:
 	kubectl --context=federation create -f manifests/geoserver-service.yaml

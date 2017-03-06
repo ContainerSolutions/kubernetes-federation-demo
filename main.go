@@ -20,10 +20,10 @@ func main() {
 		serviceHost: os.Getenv("GEOSERVER_SERVICE_HOST"),
 		servicePort: os.Getenv("GEOSERVER_SERVICE_PORT"),
 		provider:    provider,
-		zone:        getVMData(provider, ""),
+		zone:        NewZone(provider, ""),
 		isAdmin:     getEnvValueBool("ADMIN"),
 		isReady:     true,
-		traffic:     make(map[string]int64),
+		traffic:     NewCounterRegistry(),
 	}
 
 	if apiConfig.serviceHost != "" {
@@ -39,8 +39,6 @@ func main() {
 	}
 
 	if apiConfig.isAdmin {
-		registry := NewRegistryService()
-		adminConfig.registryService = registry
 		adminConfig.federationIP = os.Getenv("FEDERATION_IP")
 		adminConfig.clusters = os.Getenv("CLUSTERS")
 		adminConfig.adminPanel = NewAdminPanel()
@@ -49,7 +47,7 @@ func main() {
 
 		serviceConfig.adminHost = getEnvOrElse("REMOTE_IP", "")
 		serviceConfig.adminPort = getEnvOrElse("REMOTE_PORT", "")
-		serviceConfig.interval = getEnvOrElse("INTERVAL", "5")
+		serviceConfig.interval = getEnvOrElse("INTERVAL", "1")
 
 		heart := NewHeartBeat(&apiConfig, &serviceConfig)
 		heart.Start()

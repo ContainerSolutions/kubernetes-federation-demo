@@ -23,7 +23,7 @@ type heartbeat struct {
 
 func NewHeartBeat(apiConfig *ApiConfig, serviceConfig *ServiceConfig) *heartbeat {
 
-	intervalNum := 10
+	intervalNum := 1
 
 	if intNum, err := strconv.Atoi(serviceConfig.interval); err == nil {
 		intervalNum = intNum
@@ -72,7 +72,7 @@ func (h *heartbeat) Start() {
 
 func (h *heartbeat) ping(url string) {
 	// add the traffic information
-	h.apiConfig.zone.Traffic = h.apiConfig.traffic
+	h.apiConfig.zone.IncrementZones(h.apiConfig.traffic.AllZones())
 
 	if data := h.apiConfig.zone.toJson(); len(data) > 0 {
 

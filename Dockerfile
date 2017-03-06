@@ -8,7 +8,7 @@ ADD ./vendor/k8s.io /usr/local/go/src/k8s.io
 
 ADD . /opt/geoserver/
 
-ADD ./kubernetes/client/bin/kubefed /opt/geoserver/kubefed
+#ADD ./kubernetes/client/bin/kubefed /opt/geoserver/kubefed
 
 WORKDIR /opt/geoserver/
 

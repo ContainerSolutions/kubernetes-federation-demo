@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -43,6 +44,7 @@ type zone struct {
 	Ready           bool
 	Timestamp       time.Time
 	Traffic         map[string]int64
+	mutex           sync.RWMutex
 }
 
 // coordinates information of the ip address
@@ -57,9 +59,11 @@ type coordinates struct {
 }
 
 // main method which retrieves additional info
-func getVMData(provider CloudProvider, clientIp string) *zone {
+func NewZone(provider CloudProvider, clientIp string) *zone {
 	z := zone{
 		CloudProvider: provider,
+		Traffic:       make(map[string]int64),
+		mutex:         sync.RWMutex{},
 	}
 
 	getVMInfo(provider, &z)
@@ -74,9 +78,65 @@ func getVMData(provider CloudProvider, clientIp string) *zone {
 	return &z
 }
 
+// ========================================================================
+// Traffic counter
+// func (z *zone) AllZones() map[string]int64 {
+
+// 	r.mutex.Lock()
+// 	defer r.mutex.Unlock()
+// 	return r.Zones
+// }
+
+func (z *zone) Increment(zone string) {
+
+	z.mutex.Lock()
+	defer z.mutex.Unlock()
+	// if the entry exists, then increment its value
+	if _, ok := z.Traffic[zone]; ok {
+		z.Traffic[zone]++
+	} else {
+		// otherwise create a new entry
+		z.Traffic[zone] = 1
+	}
+}
+
+// This is used in the admin to increment the counters for each zones,
+// arriving from the heartbeats
+func (z *zone) IncrementZones(zones map[string]int64) {
+
+	z.mutex.Lock()
+	defer z.mutex.Unlock()
+
+	fmt.Println("COUNTER:", zones)
+
+	// loop through the data coming from the parameter
+	for zone, counter := range zones {
+		if _, ok := z.Traffic[zone]; ok {
+			z.Traffic[zone] += counter
+		} else {
+			// otherwise create a new entry
+			z.Traffic[zone] = counter
+		}
+
+	}
+}
+
+func (z *zone) Get(zone string) int64 {
+	z.mutex.RLock()
+	defer z.mutex.RUnlock()
+
+	return z.Traffic[zone]
+
+}
+
+// ========================================================================
+
 func (z *zone) toJson() []byte {
 	var data []byte
 	var err error
+
+	z.mutex.RLock()
+	defer z.mutex.RUnlock()
 
 	data, err = json.Marshal(z)
 	if err != nil {

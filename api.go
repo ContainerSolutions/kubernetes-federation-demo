@@ -44,17 +44,16 @@ type templateData struct {
 
 // API Service
 type api struct {
-	config              *ApiConfig
-	serviceConfig       *ServiceConfig
-	adminConfig         *AdminConfig
-	templateData        templateData
-	datacenters         map[string]bool
-	traffic             map[string]bool
-	mutex               sync.Mutex
-	mutexTraffic        sync.Mutex
-	mutexTrafficCounter sync.Mutex
-	federation          *federationManager
-	clusters            clusters
+	config        *ApiConfig
+	serviceConfig *ServiceConfig
+	adminConfig   *AdminConfig
+	templateData  templateData
+	datacenters   map[string]bool
+	traffic       map[string]bool
+	mutex         sync.Mutex
+	mutexTraffic  sync.Mutex
+	federation    *federationManager
+	clusters      clusters
 }
 
 // Create a new API struct
@@ -69,14 +68,13 @@ func NewAPI(apiConfig *ApiConfig, serviceConfig *ServiceConfig, adminConfig *Adm
 	}
 
 	api := api{
-		config:              apiConfig,
-		serviceConfig:       serviceConfig,
-		adminConfig:         adminConfig,
-		datacenters:         make(map[string]bool),
-		traffic:             make(map[string]bool),
-		mutex:               sync.Mutex{},
-		mutexTraffic:        sync.Mutex{},
-		mutexTrafficCounter: sync.Mutex{},
+		config:        apiConfig,
+		serviceConfig: serviceConfig,
+		adminConfig:   adminConfig,
+		datacenters:   make(map[string]bool),
+		traffic:       make(map[string]bool),
+		mutex:         sync.Mutex{},
+		mutexTraffic:  sync.Mutex{},
 	}
 
 	// set the federation manager if the FEDERATION_IP
@@ -178,17 +176,8 @@ func (api *api) requestsMiddleware(next http.Handler) http.Handler {
 
 		trafficSourceZone := r.Header.Get("X-Origin-Region")
 		if trafficSourceZone != "" {
-			// if the key already exists, then increment the counter
-			api.mutexTrafficCounter.Lock()
-			defer api.mutexTrafficCounter.Unlock()
-			if currentCounter, ok := api.config.traffic[trafficSourceZone]; ok {
-				api.config.traffic[trafficSourceZone] = currentCounter + 1
-				log.Printf("Rate counter incremented for zone %s: %s\n", trafficSourceZone, api.config.traffic[trafficSourceZone])
-			} else {
-				// create the entry
-				api.config.traffic[trafficSourceZone] = 1
-				log.Printf("Rate counter created for zone %s: %s\n", trafficSourceZone, api.config.traffic[trafficSourceZone])
-			}
+			// increment the counter for traffic coming to a specific zone
+			api.config.traffic.Increment(trafficSourceZone)
 		}
 
 		next.ServeHTTP(w, r)
@@ -209,7 +198,6 @@ func (api *api) clustersHandlerFunc(w http.ResponseWriter, r *http.Request) {
 			staticCluster.Joined = false
 
 			if federatedCluster.Meta.Name == staticCluster.Name {
-				log.Println("Found federated cluster:", federatedCluster.Meta.Name)
 				staticCluster.Joined = true
 				break
 			}
@@ -274,7 +262,7 @@ func (api *api) stopTraffic(w http.ResponseWriter, r *http.Request) {
 
 	if dc != "" {
 		api.mutexTraffic.Lock()
-		api.traffic[dc] = true
+		api.traffic[dc] = false
 		api.mutexTraffic.Unlock()
 		log.Println("Traffic from", dc, "disabled.")
 	}
@@ -297,7 +285,7 @@ func (api *api) trafficSourceActive(w http.ResponseWriter, r *http.Request) {
 
 func (api *api) adminHandlerFunc(w http.ResponseWriter, r *http.Request) {
 
-	vms := api.adminConfig.adminPanel.getAll()
+	vms := api.adminConfig.adminPanel.AllZones()
 	data, _ := json.Marshal(&vms)
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(data)
@@ -321,36 +309,31 @@ func (api *api) pingHandlerFunc(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// the heartbeat ping responds to the clients and may set the READY flag in the zone
+	// thefore we have to overwrite it here
+	// The value is coming from the admin
+
 	if z.Name != "" {
-		if value, ok := api.datacenters[z.Name]; ok {
-			log.Println("Datacenter:", z.Name, value)
-			z.Ready = value
+		// ping the ZONE and increase the traffic counters
+		api.adminConfig.adminPanel.Ping(z)
+
+		// set the READY flag
+		if enabled, ok := api.datacenters[z.Name]; ok {
+			if enabled {
+				api.adminConfig.adminPanel.Enable(z.Name)
+			} else {
+				api.adminConfig.adminPanel.Disable(z.Name)
+			}
 		}
+
+		data := api.adminConfig.adminPanel.get(z.Name).toJson()
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(data)
+		return
 	}
 
-	// retrieve the existing traffic for the zone
-	existingZone := api.adminConfig.adminPanel.get(z.Name)
-	if existingZone != nil {
-
-		// loop through all source of traffic the zone received
-		for trafficSourceZoneName, newTrafficCounter := range z.Traffic {
-			existingZone.Traffic[trafficSourceZoneName] = newTrafficCounter
-		}
-	}
-
-	if existingZone == nil {
-		existingZone = &z
-		log.Printf("NOT Found: %s\n", existingZone)
-	}
-
-	//log.Println("Zone", existingZone.Name, "updated traffic:", existingZone.Traffic)
-
-	// update the in memory info
-	api.adminConfig.adminPanel.ping(existingZone)
-
-	data := existingZone.toJson()
-	w.Header().Set("Content-Type", "application/json")
-	w.Write(data)
+	w.WriteHeader(http.StatusInternalServerError)
+	w.Write([]byte("Could not de-serialize zone data"))
 
 }
 

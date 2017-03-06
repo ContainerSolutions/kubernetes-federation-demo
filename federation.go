@@ -90,7 +90,7 @@ func (f *federationManager) AllClusters() ClustersResponse {
 		log.Println("Error parsing all clusters response:", err)
 	}
 
-	log.Println(clusterResp)
+	//log.Println(clusterResp)
 
 	return clusterResp
 }
