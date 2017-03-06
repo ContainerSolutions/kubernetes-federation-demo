@@ -86,6 +86,12 @@ func NewZone(provider CloudProvider, clientIp string) *zone {
 // 	defer r.mutex.Unlock()
 // 	return r.Zones
 // }
+func (z *zone) ResetCounter() {
+
+	for key, _ := range z.Traffic {
+		z.Traffic[key] = 0
+	}
+}
 
 func (z *zone) Increment(zone string) {
 

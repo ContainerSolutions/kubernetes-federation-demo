@@ -13,7 +13,7 @@ spec:
     spec:
       containers:
       - name: geoserver
-        image: containersoluploader/geoserver:0.9.4
+        image: containersoluploader/geoserver:0.9.5
         imagePullPolicy: Always
         ports:
         - containerPort: 8080

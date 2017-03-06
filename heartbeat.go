@@ -104,6 +104,9 @@ func (h *heartbeat) ping(url string) {
 			h.apiConfig.isReady = z.Ready
 			log.Printf("Ping response: %s\n", z)
 
+			// reset the counter
+			h.apiConfig.zone.ResetCounter()
+
 		} else {
 			log.Println("Could not send heartbeat", err)
 		}
