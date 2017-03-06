@@ -54,12 +54,15 @@ func (h *heartbeat) Start() {
 	}
 
 	// start the ticker
+	timeout := time.After(900 * time.Millisecond)
 	ticker := time.NewTicker(time.Duration(h.interval) * time.Second)
 
 	quit := make(chan struct{})
 	go func() {
 		for {
 			select {
+			case <-timeout:
+				// do nothing - just swallow
 			case <-ticker.C:
 				h.ping(url)
 			case <-quit:

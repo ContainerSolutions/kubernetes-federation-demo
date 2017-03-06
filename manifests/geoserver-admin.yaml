@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
       - name: geoserver-admin
-        image: containersoluploader/geoserver:0.9.1
+        image: containersoluploader/geoserver:0.9.4
         imagePullPolicy: Always
         volumeMounts:
         - name: federation

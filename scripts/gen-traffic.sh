@@ -22,7 +22,7 @@ while true; do
         sleep 2
     else
         if echo $active | grep "true" >/dev/null; then 
-            ab -n 300 -t 2 -H "$HEADER" http://$INGRESS_IP/ >/dev/null 2>&1
+            ab -n 300 -t 2 -H "$HEADER" http://$INGRESS_IP/load >/dev/null 2>&1
         else
             echo "I'm currently not supposed to generate traffic - waiting 2 seconds..."
             sleep 2

@@ -47,7 +47,7 @@ func main() {
 
 		serviceConfig.adminHost = getEnvOrElse("REMOTE_IP", "")
 		serviceConfig.adminPort = getEnvOrElse("REMOTE_PORT", "")
-		serviceConfig.interval = getEnvOrElse("INTERVAL", "1")
+		serviceConfig.interval = getEnvOrElse("INTERVAL", "5")
 
 		heart := NewHeartBeat(&apiConfig, &serviceConfig)
 		heart.Start()

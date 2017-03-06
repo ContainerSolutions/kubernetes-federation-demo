@@ -127,10 +127,13 @@ func (api *api) Start() {
 
 	} else {
 
-		indexHandler := http.HandlerFunc(api.indexHandlerFunc)
+		indexHandler := http.HandlerFunc(api.loadHandlerFunc)
+
+		// load generation
+		http.Handle("/load", api.requestsMiddleware(indexHandler))
 
 		// Add zone handler
-		http.Handle("/", api.requestsMiddleware(indexHandler))
+		http.HandleFunc("/", api.indexHandlerFunc)
 
 		// Service to get the data
 		http.HandleFunc("/location", api.zoneHandlerFunc)
@@ -366,6 +369,10 @@ func (api *api) indexHandlerFunc(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "%s", api.config.zone.Name)
 }
 
+func (api *api) loadHandlerFunc(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+}
+
 func (api *api) zoneIndexHandlerFunc(w http.ResponseWriter, r *http.Request) {
 
 	if r.URL.Path != "/" {
@@ -455,6 +462,11 @@ func (api *api) zoneHandlerFunc(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *api) writeReadyness(w http.ResponseWriter) {
+
+	if api.config.isAdmin {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
 
 	api.mutex.Lock()
 	if api.config.isReady {
